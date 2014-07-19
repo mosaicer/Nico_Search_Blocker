@@ -2,7 +2,7 @@
 // @name        Nico Search Blocker
 // @namespace   https://github.com/mosaicer
 // @author      mosaicer
-// @description 各動画のタグ一覧の表示をするボタンを追加し、タグ・タイトルで検索のブロックを可能にする
+// @description 各動画のタグ一覧を表示するボタンを追加し、タグでの検索のブロックを可能にする
 // @include     http://www.nicovideo.jp/tag/*
 // @include     http://www.nicovideo.jp/search/*
 // @version     2.0
@@ -19,7 +19,13 @@ $(function () {
       // タグ一覧を表示するボタン
       clickTriangle = $("<li>").addClass("tagsCheck").text("▼"),
       // ブロックしたタグ一覧を表示するボタン
-      tagsMenu = $("<li>").html("<a href='javascript:void(0);'><span id='tagsMenu'>|タグ▼");
+      tagsMenu = $("<li>").html("<a href='javascript:void(0);'><span id='tagsMenu'>|タグ▼"),
+      // ブロックしたタグを入れる変数
+      blcTagsTemp = "",
+      // クリックしたタグを代入
+      clickTag,
+      // 全ての動画の全てのタグを格納(連想配列)
+      tagsList = {}; // {} === new Object()
 
   // インストール後、最初のアクセスの時、ブロックの機能を有効にする
   if (typeof GM_getValue("blcTags_flag") === "undefined") {
@@ -38,6 +44,70 @@ $(function () {
     }
   }
 
+  // タグ格納+ブロック処理
+  $("li.item").each(function () { // 各動画の頭のタグ
+        // 各動画の全てのタグを格納
+    var allTags = [],
+        // 対象のタグがブロックタグに入ってるかどうかのフラグ
+        flag = 0,
+        // 後から参照できるように変数にしまっておく
+        thisLi = $(this);
+
+    // 動画IDがちゃんと取れた時
+    if (typeof $(this).attr("data-id") !== "undefined") {
+      // HTTPリクエスト
+      GM_xmlhttpRequest({
+        method: "GET",
+        url: "http://ext.nicovideo.jp/api/getthumbinfo/" + $(this).attr("data-id"),
+        onload: function (responseDetails) {
+          var parser, doc; // DOMにパースする関連
+
+          // XMLをパース
+          parser = new DOMParser();
+          doc = parser.parseFromString(responseDetails.responseText, "application/xml");
+          // 各<tag>タグに対して処理を行う
+          $(doc).find("tag").each(function () {
+            clickTag = $(this).text();
+            // ブロックリストが設定されている時
+            if (typeof GM_getValue("blc_tags") !== "undefined" && blcTagsList !== "" && GM_getValue("blcTags_flag") === 1) {
+              // ブロックされたタグが見つからなかった場合
+              if (flag === 0) {
+                // 配列でタグを取得した時
+                if (typeof blcTagsList === "object") {
+                  blcTagsList.forEach(function (targetTag) {
+                    if (targetTag === clickTag && flag === 0) {
+                      flag = 1;
+                    }
+                  });
+                }
+                // 文字列でタグを取得した時
+                else {
+                  if (clickTag === blcTagsList) {
+                    flag = 1;
+                  }
+                }
+                // ブロックされたタグが見つからなかった場合は配列に格納
+                if (flag === 0) {
+                  allTags.push("<span class='addBlcTag'>" + clickTag + "</span>");
+                }
+              }
+            } else {
+              allTags.push("<span class='addBlcTag'>" + clickTag + "</span>");
+            }
+          });
+          // ブロックされたタグが見つからなかった場合は連想配列に格納 , sm... => タグ一覧の配列
+          if (flag === 0) {
+            tagsList[$(thisLi).attr("data-id")] = allTags;
+          }
+          // ブロックされたタグが見つかった場合は動画自体を消去
+          else {
+            $(thisLi).remove();
+          }
+        }
+      });
+    }
+  });
+
   setCommandMenu(); // ユーザスクリプトコマンドメニューに項目を追加する
 
   // ユーザー広告部分を削除
@@ -54,7 +124,9 @@ $(function () {
         // クリックした要素の親要素
     var thisParent,
         // 動画のID
-        vidsmNum;
+        vidsmNum,
+        // 各動画の全てのタグの文字列
+        allTagsList;
 
     // タグ一覧を開いてない時
     if ($(this).text() === "▼") {
@@ -62,71 +134,52 @@ $(function () {
 
       thisParent = $(this).parent(); // タグ挿入時に指定するセレクタ
       vidsmNum = $(this).prev().find("a").attr("href").substring(33); // 動画のIDを取得する
+      allTagsList = tagsList[vidsmNum].join(",　"); // 動画IDに紐付けられた配列を文字列に変換
 
-      // HTTPリクエスト
-      GM_xmlhttpRequest({
-        method: "GET",
-        url: "http://www.nicovideo.jp/watch/" + vidsmNum,
-        onload: function (httpSource) {
-          var i,
-              // DOMにパースする関連
-              parser,
-              doc,
-              // タグのリンク
-              vidTags,
-              // 全てのタグ
-              allTags;
+      // タグを<DIV>タグで囲って挿入
+      $(thisParent).after($("<div>").addClass("videoTags").html(allTagsList));
+      // タグ群のスタイル
+      $(".videoTags").css("background-color", "#FFD700");
 
-          // 文字列で格納されたHTMLのソースをDOMにパースする
-          parser = new DOMParser();
-          doc = parser.parseFromString(httpSource.responseText, "text/html");
+      // 表示されたタグをクリックした時
+      $(".addBlcTag").css("cursor", "pointer").click(function () {
+        var addFlag = 0; // 重複チェックのフラグ
 
-          // タグのリンクを取得
-          vidTags = doc.querySelectorAll("a[class='videoHeaderTagLink']");
-          for (i = 0; i < vidTags.length - 1; i++) { // vidTagsの最後に空白が入っているのでそれを取らないために-1する
-            if (i !== 0) {
-              allTags += ",　" + "<span class='addBlcTag'>" + $(vidTags[i]).text() + "</span>(" + (i+1) + ")";
-            } else {
-              allTags = "<span class='addBlcTag'>" + $(vidTags[i]).text() + "</span>(" + (i+1) + ")";
+        clickTag = $(this).text();
+        // 初めてor空に、追加する時
+        if (typeof GM_getValue("blc_tags") === "undefined" || blcTagsList === "") {
+          GM_setValue("blc_tags", clickTag);
+          location.reload(); // ページを更新して設定を反映させる
+        }
+        // すでに入ってる時
+        else {
+          // 配列でタグを取得した時
+          if (typeof blcTagsList === "object") {
+            // クリックしたタグがブロックリストに入っているかチェック
+            blcTagsList.forEach(function (targetTag) {
+              if (targetTag === clickTag && addFlag === 0) {
+                addFlag = 1;
+              }
+            });
+            // タグが重複していない時
+            if (addFlag === 0) {
+              blcTagsTemp = blcTagsList.join(",/,/") + ",/,/" + clickTag;
             }
           }
-          // タグを<DIV>タグで囲って挿入
-          $(thisParent).after($("<div>").addClass("videoTags").html(allTags));
-          // タグ群のスタイル
-          $(".videoTags").css("background-color", "#FFD700");
-
-          // 表示されたタグをクリックした時
-          $(".addBlcTag").css("cursor", "pointer").click(function () {
-            var blcTagsTemp;
-
-            // 初めてor空に、追加する時
-            if (typeof GM_getValue("blc_tags") === "undefined" || blcTagsList === "") {
-              GM_setValue("blc_tags", $(this).text());
-              location.reload(); // ページを更新して設定を反映させる
+          // 文字列でタグを取得した時
+          else {
+            if (blcTagsList !== clickTag) {
+              blcTagsTemp = blcTagsList + ",/,/" + clickTag;
             }
-            // すでに入ってる時
-            else {
-              // タグが重複してない時
-              if (blcTagsList.indexOf( $(this).text() ) === -1) {
-                // 配列でタグを取得した時
-                if (typeof blcTagsList === "object") {
-                  blcTagsTemp = blcTagsList.join(",/,/") + ",/,/" + $(this).text();
-                }
-                // 文字列でタグを取得した時
-                else {
-                  blcTagsTemp = blcTagsList + ",/,/" + $(this).text();
-                }
-                // ブロックするタグを再設定
-                GM_setValue("blc_tags", blcTagsTemp);
-                // ページを更新して設定を反映させる
-                location.reload();
-              }
-              // タグが重複している時
-              else {
-                alert($(this).text() + "はすでに設定されています");
-              }
-            }
-          });
+          }
+          if (addFlag === 1) {
+            alert("\"" + clickTag + "\"" + "　はすでに設定されています");
+          } else {
+            // ブロックするタグを再設定
+            GM_setValue("blc_tags", blcTagsTemp);
+            // ページを更新して設定を反映させる
+            location.reload();
+          }
         }
       });
     }
@@ -140,9 +193,8 @@ $(function () {
 
   // ヘッダーにブロックしたタグ一覧を表示させるメニュー関連----------------------------------------------------------
   // メニューをクリックした時
-  $("#tagsMenu").click(function () {
-    var blcTagsTemp = ""; // ブロックしたタグを入れる変数
-
+  $("#tagsMenu").bind("click", function () {
+    blcTagsTemp = "";
     // ブロックしたタグ一覧を閉じている時
     if ( $(this).text().match(/▼/) ) {
       $(this).text("|タグ▲");
@@ -163,8 +215,6 @@ $(function () {
 
       // ブロックしたタグをクリックした時(ブロックするタグが設定されていなければ実行されない)
       $(".blockTag").click(function () {
-        var clickTag; // クリックしたタグを代入
-
         // 中身を空にする
         blcTagsTemp = "";
         // 配列でタグを取得した時(タグが1つの時は必ずそれが削除されるためその動作は不要)
