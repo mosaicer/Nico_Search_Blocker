@@ -199,7 +199,6 @@ $(function () {
             break;
         }
       } else {
-        console.log("a");
         $(liTag).remove();
       }
     },
