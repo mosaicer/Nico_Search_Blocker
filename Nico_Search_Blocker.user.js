@@ -5,7 +5,7 @@
 // @description 各動画のタグ一覧を表示するボタンを追加し、タグ・キーワード検索のブロックを可能にする
 // @include     http://www.nicovideo.jp/tag/*
 // @include     http://www.nicovideo.jp/search/*
-// @version     4.1
+// @version     4.2
 // @grant       GM_xmlhttpRequest
 // @grant       GM_registerMenuCommand
 // @grant       GM_getValue
@@ -17,17 +17,18 @@ $(function () {
       // DBから取得する系処理
   var DBInit = function() {
         this.flagArray = {
-          "blcTags_flag": ["タグでの動画のブロックを", {}], // オブジェクトは、キー:フラグ名+"Change",値:メニューの関数
-          "blcKeywords_flag": ["キーワードでの動画のブロックを", {}],
-          "unwantedVid_flag": ["検索対象外の動画のブロックを", {}],
-          "removedVid_flag": ["削除済みの動画のブロックを", {}],
-          "cacheLoad_flag": ["キャッシュを使った読み込みを", {}],
-          "strictComp_flag": ["文字列比較の厳格化を", {}]
+          blcTags_flag: ["タグでの動画のブロックを", {}], // オブジェクトは、キー:フラグ名+"Change",値:メニューの関数
+          blcKeywords_flag: ["キーワードでの動画のブロックを", {}],
+          unwantedVid_flag: ["検索対象外の動画のブロックを", {}],
+          removedVid_flag: ["削除済みの動画のブロックを", {}],
+          cacheLoad_flag: ["キャッシュを使った読み込みを", {}],
+          strictComp_flag: ["文字列比較の厳格化を", {}]
         };
         this.blcNameArray = {
-          "blc_tags": [[], ["|タグ▼", "|タグ▲"]], // 配列にはブロックリストから取得した値が格納される
-          "blc_keywords": [[], ["キーワード▼", "キーワード▲"]]
+          blc_tags: [[], ["|タグ▼", "|タグ▲"]], // 配列にはブロックリストから取得した値が格納される
+          blc_keywords: [[], ["キーワード▼", "キーワード▲"]]
         };
+        this.searchSelector = ["div.message > p > span:eq(0)", "header.contentHeader > h1 > span"];
         this.msgFlag = false;
         this.msg = "";
       },
@@ -35,9 +36,10 @@ $(function () {
       // 各ボタンを挿入
       ButtonSet = function() {
         this.btnArray = {
-          ".itemData > ul.list": $("<li>").addClass("tagsCheck").text("▼"),
+          ".itemData > ul.list:lt(32)": $("<li>").addClass("tagsCheck").text("▼"),
           "li[data-enable-uad='1'] > .itemContent > p.itemTitle": $("<span>").addClass("titlesCheck").text("★"),
-          ".siteHeaderGlovalNavigation": "<li><a href='javascript:void(0);'><span id='tagsMenu'>|タグ▼</span></a></li><li><a href='javascript:void(0);'><span id='keywordsMenu'>キーワード▼</span></a></li>"
+          ".siteHeaderGlovalNavigation": "<li><a href='javascript:void(0);'><span id='tagsMenu'>|タグ▼</span></a></li>" +
+                                          "<li><a href='javascript:void(0);'><span id='keywordsMenu'>キーワード▼</span></a></li>"
         };
       },
       btnSetting,
@@ -46,7 +48,7 @@ $(function () {
         this.tagsList = {}; // オブジェクトは、キー:動画のID,値:各動画のタグ(配列)orタイトル
         this.titlesList = {};
         this.blcLtrTemp = "";
-        this.errCount = 0;
+        this.errCount = 1;
       },
       loadFeatures,
       // for-inで使う変数
@@ -101,14 +103,24 @@ $(function () {
   LoadCheck.prototype = {
     // HTTPリクエストのエラー時
     errChecker: function(res) {
-      if (this.errCount === 0) {
-        this.errCount = 1;
-        alert("エラーが発生しました(" + this.errCount + ")。次回以降はコンソールに記録されます。\n" + "\nレスポンスの本体:\n" + res.responseText + "\nリクエストの状態: " + res.readyState + "\nレスポンスに含まれるHTTPヘッダー:\n" + res.responseHeaders + "\nレスポンスのHTTPエラーコード: " + res.status + "\nHTTPステータステキスト: " + res.statusText + "\nリダイレクト先のURL: " + res.finalUrl);
-        alert("連続してエラーが発生する場合は、ニコニコ動画やニコニコ動画APIの稼働状況をご確認ください。");
-      } else {
-        this.errCount++;
-        console.log("エラーが発生しました(" + this.errCount + ")。\n" + "\nレスポンスの本体:\n" + res.responseText + "\nリクエストの状態: " + res.readyState + "\nレスポンスに含まれるHTTPヘッダー:\n" + res.responseHeaders + "\nレスポンスのHTTPエラーコード: " + res.status + "\nHTTPステータステキスト: " + res.statusText + "\nリダイレクト先のURL: " + res.finalUrl);
+      var message = "エラーが発生しました(" + this.errCount + ")。次回以降はコンソールに記録されます。\n" +
+                    "\nレスポンスの本体:\n" + res.responseText +
+                    "\nリクエストの状態: " + res.readyState +
+                    "\nレスポンスに含まれるHTTPヘッダー:\n" + res.responseHeaders +
+                    "\nレスポンスのHTTPエラーコード: " + res.status +
+                    "\nHTTPステータステキスト: " + res.statusText +
+                    "\nリダイレクト先のURL: " + res.finalUrl;
+
+      switch (this.errCount) {
+        case 1:
+          alert(message);
+          alert("連続してエラーが発生する場合は、ニコニコ動画やニコニコ動画APIの稼働状況をご確認ください。");
+          break;
+        default:
+          console.error(message);
+          break;
       }
+      this.errCount++;
     },
     // 完全一致で比較(タグ・文字列追加時・検索対象)
     completeComp: function(targetLtr) {
@@ -128,17 +140,12 @@ $(function () {
         }
       }
       // 検索対象が含まれているかのチェック
-      else {
-        // 厳密に比較
-        if (this.chkFlag === 0 && GM_getValue("strictComp_flag") === true && this.clickObj === firstSetting.searchTag) {
-          this.chkFlag = 1;
-        }
-        // 全角半角を気にしない
-        else if (this.chkFlag === 0 && GM_getValue("strictComp_flag") === false) {
+      else if (this.chkFlag === 0) {
+        if (GM_getValue("strictComp_flag") === true) {
+          this.searchTagAry.forEach(this.letterComp.bind(this));
+        } else {
           this.clickObj = this.clickObj.toOneByteAlphaNumeric();
-          if (this.clickObj.match(firstSetting.searchTag)) { // matchの中身 -> /^Tag$/i
-            this.chkFlag = 1;
-          }
+          this.searchTagAry.forEach(this.letterMatch.bind(this));
         }
       }
     },
@@ -160,29 +167,43 @@ $(function () {
         }
       }
       // 検索対象が含まれているかのチェック
-      else {
-        // 厳密に比較
-        if (this.chkFlag === 0 && GM_getValue("strictComp_flag") === true && this.clickObj.indexOf(firstSetting.searchKeyword) >= 0) {
-          this.chkFlag = 1;
-        }
-        // 全角半角を気にしない
-        else if (this.chkFlag === 0 && GM_getValue("strictComp_flag") === false) {
+      else if (this.chkFlag === 0) {
+        if (GM_getValue("strictComp_flag") === true) {
+          this.searchKeywordAry.forEach(this.letterIndexOf.bind(this));
+        } else {
           this.clickObj = this.clickObj.toOneByteAlphaNumeric();
-          if (this.clickObj.match(firstSetting.searchKeyword)) { // matchの中身 -> /Keyword/i
-            this.chkFlag = 1;
-          }
+          this.searchKeywordAry.forEach(this.letterMatch.bind(this));
         }
+      }
+    },
+    letterComp: function (targetLtr) {
+      if (this.chkFlag === 0 && this.clickObj === targetLtr) {
+        this.chkFlag = 1;
+      }
+    },
+    letterMatch: function (targetLtr) {
+      if (this.chkFlag === 0 && this.clickObj.match(targetLtr)) { // matchの中身 -> /^Tag$/i or /Keyword/i
+        this.chkFlag = 1;
+      }
+    },
+    letterIndexOf: function (targetLtr) {
+      if (this.chkFlag === 0 && this.clickObj.indexOf(targetLtr) >= 0) {
+        this.chkFlag = 1;
       }
     },
     // タイトルと記述での処理
     ttlAndDscrpt: function() {
       // 検索対象が含まれているか(タグ検索ではチェックしない)
-      if (typeof firstSetting.searchKeyword !== "undefined") {
+      if (typeof this.searchKeywordAry !== "undefined") {
         this.partComp();
       }
       // ブロックリストと比較(どちらの検索でもチェック)
-      if (typeof GM_getValue("blc_keywords") !== "undefined" && firstSetting.blcNameArray["blc_keywords"][0][0] !== "" && GM_getValue("blcKeywords_flag") === true) {
-        firstSetting.blcNameArray["blc_keywords"][0].forEach(this.partComp, loadFeatures);
+      if (
+          typeof GM_getValue("blc_keywords") !== "undefined" &&
+          firstSetting.blcNameArray.blc_keywords[0][0] !== "" &&
+          GM_getValue("blcKeywords_flag") === true
+      ) {
+        firstSetting.blcNameArray.blc_keywords[0].forEach(this.partComp, loadFeatures);
       }
     },
     // 動画のタグリストとタイトルリストを取得 or 動画を消去
@@ -190,16 +211,14 @@ $(function () {
       if (this.blcFlag === 0) {
         switch (stackName) {
           case "tags":
-            this.tagsList[$(liTag).attr("data-id")] = this.allTags;
+            this.tagsList[liTag.attr("data-id")] = this.allTags;
             break;
           case "titles":
-            this.titlesList[$(liTag).attr("data-id")] = this.clickObj;
-            break;
-          default:
+            this.titlesList[liTag.attr("data-id")] = this.clickObj;
             break;
         }
       } else {
-        $(liTag).remove();
+        liTag.remove();
       }
     },
     // ブロックする文字列を追加
@@ -230,16 +249,18 @@ $(function () {
     blcMenu: function(theTag, stackName, clsName, idName) {
       this.blcLtrTemp = "";
       // 一覧を閉じている時
-      if ($(theTag).text().match(/▼/)) {
-        $(theTag).text(firstSetting.blcNameArray[stackName][1][1]);
+      if (theTag.text().match(/▼/)) {
+        theTag.text(firstSetting.blcNameArray[stackName][1][1]);
         if (typeof GM_getValue(stackName) !== "undefined" && firstSetting.blcNameArray[stackName][0][0] !== "") {
-          this.blcLtrTemp = "<li><a class='" + clsName + "' href='javascript:void(0);'>" + firstSetting.blcNameArray[stackName][0].join("</a></li><li><a class='" + clsName + "' href='javascript:void(0);'>") + "</a></li>";
+          this.blcLtrTemp = "<li><a class='" + clsName + "' href='javascript:void(0);'>" +
+                            firstSetting.blcNameArray[stackName][0].join("</a></li><li><a class='" +
+                            clsName + "' href='javascript:void(0);'>") + "</a></li>";
         }
-        $("<ul style='color: black;'>" + this.blcLtrTemp + "</ul>").appendTo($(theTag).parent());
+        $("<ul style='color: black;'>" + this.blcLtrTemp + "</ul>").appendTo(theTag.parent());
       }
       // 一覧を開いている時
       else {
-        $(theTag).text(firstSetting.blcNameArray[stackName][1][0]);
+        theTag.text(firstSetting.blcNameArray[stackName][1][0]);
         $(idName).next().remove();
       }
     }
@@ -285,9 +306,21 @@ $(function () {
 
   // 検索対象を格納
   if(location.href.match(/www\.nicovideo\.jp\/search\//)) {
-    firstSetting.searchKeyword = GM_getValue("strictComp_flag") === true ? $("div.message > p > span:eq(0)").text() : new RegExp(preg_quote($("div.message > p > span:eq(0)").text().toOneByteAlphaNumeric(), "/"), "i");
+    if (GM_getValue("strictComp_flag") === true) {
+      loadFeatures.searchKeywordAry = $(firstSetting.searchSelector[0]).text().split(" ");
+    } else {
+      loadFeatures.searchKeywordAry = $(firstSetting.searchSelector[0]).text().split(" ").map(function (targetLtr) {
+        return (new RegExp(preg_quote(targetLtr.toOneByteAlphaNumeric(), "/"), "i"));
+      });
+    }
   } else {
-    firstSetting.searchTag = GM_getValue("strictComp_flag") === true ? $.trim($("header.contentHeader > h1 > span").text()) : new RegExp("^" + preg_quote($.trim($("header.contentHeader > h1 > span").text()).toOneByteAlphaNumeric(), "/") + "$", "i");
+    if (GM_getValue("strictComp_flag") === true) {
+      loadFeatures.searchTagAry = $.trim($(firstSetting.searchSelector[1]).text()).split(" ");
+    } else {
+      loadFeatures.searchTagAry = $.trim($(firstSetting.searchSelector[1]).text()).split(" ").map(function (targetLtr) {
+        return (new RegExp("^" + preg_quote(targetLtr.toOneByteAlphaNumeric(), "/") + "$", "i"));
+      });
+    }
   }
 
   // ignoreCacheの設定
@@ -299,8 +332,8 @@ $(function () {
     // HTTPリクエスト
     GM_xmlhttpRequest({
       method: "GET",
-      url: "http://ext.nicovideo.jp/api/getthumbinfo/" + $(thisLi).attr("data-id"),
-      ignoreCache: firstSetting.ignoreFlag, // falseでキャッシュを使った読み込み
+      url: "http://ext.nicovideo.jp/api/getthumbinfo/" + thisLi.attr("data-id"),
+      ignoreCache: DBInit.ignoreFlag, // falseでキャッシュを使った読み込み
       onload: function (responseDetails) {
             // 文字列からXMLをパース
         var parser = new DOMParser(),
@@ -322,19 +355,28 @@ $(function () {
               $(doc).find("tag").each(function () {
                 loadFeatures.clickObj = $(this).text();
                 // 検索対象が含まれているか
-                if (typeof firstSetting.searchTag !== "undefined") {
+                if (typeof loadFeatures.searchTagAry !== "undefined") {
                   loadFeatures.completeComp();
                 } else {
                   loadFeatures.partComp();
                 }
                 // ブロックリストの各キーワードと比較
-                if (typeof GM_getValue("blc_keywords") !== "undefined" && firstSetting.blcNameArray["blc_keywords"][0][0] !== "" && GM_getValue("blcKeywords_flag") === true && loadFeatures.blcFlag === 0) {
-                  firstSetting.blcNameArray["blc_keywords"][0].forEach(loadFeatures.partComp, loadFeatures);
+                if (
+                    typeof GM_getValue("blc_keywords") !== "undefined" &&
+                    firstSetting.blcNameArray.blc_keywords[0][0] !== "" &&
+                    GM_getValue("blcKeywords_flag") === true &&
+                    loadFeatures.blcFlag === 0
+                ) {
+                  firstSetting.blcNameArray.blc_keywords[0].forEach(loadFeatures.partComp, loadFeatures);
                 }
                 if (loadFeatures.blcFlag === 0) {
                   // ブロックリストの各タグと比較＋タグを配列に格納
-                  if (typeof GM_getValue("blc_tags") !== "undefined" && firstSetting.blcNameArray["blc_tags"][0][0] !== "" && GM_getValue("blcTags_flag") === true) {
-                    firstSetting.blcNameArray["blc_tags"][0].forEach(loadFeatures.completeComp, loadFeatures);
+                  if (
+                      typeof GM_getValue("blc_tags") !== "undefined" &&
+                      firstSetting.blcNameArray.blc_tags[0][0] !== "" &&
+                      GM_getValue("blcTags_flag") === true
+                  ) {
+                    firstSetting.blcNameArray.blc_tags[0].forEach(loadFeatures.completeComp, loadFeatures);
                     if (loadFeatures.blcFlag === 0) {
                       loadFeatures.allTags.push("<span class='addBlcTag'>" + loadFeatures.clickObj + "</span>");
                     }
@@ -354,21 +396,21 @@ $(function () {
             // 検索対象外の動画の処理
             if (loadFeatures.blcFlag === 0 && loadFeatures.chkFlag === 0) {
               if (GM_getValue("unwantedVid_flag") === false) {
-                $("<br><span style='color:red;'>検索対象を含まない動画です</span>").appendTo($(thisLi).children("p.itemTime"));
+                $("<br><span style='color:red;'>検索対象を含まない動画です</span>").appendTo(thisLi.children("p.itemTime"));
               } else {
-                $(thisLi).remove();
+                thisLi.remove();
               }
             }
           }
           // 削除済み動画の処理
           else {
             if (GM_getValue("removedVid_flag") === false) {
-              loadFeatures.aTag = $(thisLi).children("div.itemContent").children("p.itemTitle").children("a");
-              loadFeatures.tagsList[$(thisLi).attr("data-id")] = [0];
-              loadFeatures.titlesList[$(thisLi).attr("data-id")] = $(loadFeatures.aTag).text();
-              $(loadFeatures.aTag).css("text-decoration", "line-through").css("color", "#BEBEBE");
+              loadFeatures.aTag = thisLi.children("div.itemContent").children("p.itemTitle").children("a");
+              loadFeatures.tagsList[thisLi.attr("data-id")] = [0];
+              loadFeatures.titlesList[thisLi.attr("data-id")] = loadFeatures.aTag.text();
+              loadFeatures.aTag.css("text-decoration", "line-through").css("color", "#BEBEBE");
             } else {
-              $(thisLi).remove();
+              thisLi.remove();
             }
           }
         } else {
@@ -394,7 +436,8 @@ $(function () {
       if (allTagsList !== "0") { // 動画が削除済みかどうか
         $(thisParent).after($("<div>").css("background-color", "#FFD700").html(allTagsList));
       } else {
-        $(thisParent).after($("<div>").css("background-color", "#FFD700").html("<span style='color:red; font-weight:bold'>この動画は削除されています"));
+        $(thisParent).after($("<div>").css("background-color", "#FFD700")
+                                      .html("<span style='color:red; font-weight:bold'>この動画は削除されています"));
       }
       // 表示されたタグをクリックした時
       $(".addBlcTag").css("cursor", "pointer").click(function () {
@@ -411,7 +454,8 @@ $(function () {
   });
   // タイトル表示ボタン
   $(".titlesCheck").css("color", "#B22222").css("cursor", "pointer").click(function () {
-    var blockWord = prompt("ブロックしたいキーワードを入力してください", loadFeatures.titlesList[$(this).prev().attr("href").slice(7, -21)]);
+    var blockWord = prompt("ブロックしたいキーワードを入力してください",
+                            loadFeatures.titlesList[$(this).prev().attr("href").slice(7, -21)]);
 
     // 文字列をブロックリストに追加
     if (blockWord !== null) {
