@@ -33,6 +33,10 @@
   - ユーザーコマンドメニューから、キャッシュを使った読み込みを無効にしてください。
     + それでも正しく取得できない場合は、キャッシュを消去してください。
 
+スクリーンショット
+=================
+![Chrome+Tampermonkeyで動かしたときのスクリーンショット](https://pbs.twimg.com/media/Bt2KPAgCEAMiDc4.png:large "Chrome+Tampermonkeyで動かしたときのスクリーンショット")
+
 アイデア元
 ==========
 __[Nico Nico Ranking NG](https://greasyfork.org/ja/scripts/880-nico-nico-ranking-ng) - ニコニコ動画のランキングにＮＧ機能を追加__
